@@ -11,9 +11,10 @@
 #*****************************************************************************
 # Build setting
 #*****************************************************************************
-projectName='qarm03_kernel'
+projectName='qarm04_yaffs'
 buildUboot='0'
-buildKernel='1'
+buildKernel='0'
+buildYaffs='1'
 buildSw='0'
 
 if [ ! $1 -eq '' ]; then
@@ -23,10 +24,11 @@ if [ ! $1 -eq '' ]; then
    buildSw=$3
 fi
 
-depends=('qarm_base' 'git clone https://github.com/qiweiii-git/qarm_base.git')
+depends=('qarm_base' 'git clone https://gitee.com/qiweiii-gitee/qarm_base.git')
 
 patchs=( 'qarm_base/u-boot-1.1.6' 'u-boot-1.1.6_jz2440.patch' 
-         'qarm_base/linux-2.6.22.6' 'linux-2.6.22.6_jz2440_v2v3.patch' )
+         'qarm_base/linux-2.6.22.6' 'linux-2.6.22.6_jz2440_v2v3.patch' 
+         'qarm_base/yaffs' 'yaffs_util_mkyaffsimage.patch' )
 
 #*****************************************************************************
 # Get depends
@@ -107,6 +109,20 @@ BuildKernel() {
 }
 
 #*****************************************************************************
+# Build yaffs
+#*****************************************************************************
+BuildYaffs() {
+   cd .depend/qarm_base/yaffs_patched/yaffs2/utils
+   make
+   cd $workDir/.depend/qarm_base/
+   rm -rf fs_mini
+   sudo tar xjf fs_mini.tar.bz2
+   yaffs_patched/yaffs2/utils/mkyaffs2image fs_mini rootfs_yaffs2.yaffs2
+   cd $workDir
+   cp .depend/qarm_base/rootfs_yaffs2.yaffs2 project/$projectName/bin
+}
+
+#*****************************************************************************
 # Build sw
 #*****************************************************************************
 BuildSw() {
@@ -128,6 +144,11 @@ fi
 if [[ $buildKernel -eq 1 ]]; then
    MkdirBuild
    BuildKernel
+fi
+
+if [[ $buildYaffs -eq 1 ]]; then
+   MkdirBuild
+   BuildYaffs
 fi
 
 if [[ $buildSw -eq 1 ]]; then
