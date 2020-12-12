@@ -11,10 +11,11 @@
 #*****************************************************************************
 # Build setting
 #*****************************************************************************
-projectName='qarm04_yaffs'
+projectName='qarm05_rootfs'
 buildUboot='0'
 buildKernel='0'
-buildYaffs='1'
+buildYaffs='0'
+buildRootfs='1'
 buildSw='0'
 
 if [ ! $1 -eq '' ]; then
@@ -51,6 +52,7 @@ if (( $dependCnt > 0 )); then
          ${depends[i+1]}
       fi
    done
+   sudo chmod 0755 -R ./
    cd $workDir
    echo "Info: All depends got"
 fi
@@ -72,7 +74,7 @@ if (( $patchsCnt > 0 )); then
       echo "Applying patch ${patchs[i+1]}"
       patch -f -p1 < $workDir/code/patchs/${patchs[i+1]}
    done
-   chmod 0755 -R ./
+   sudo chmod 0755 -R ./
    cd $workDir
    echo "Info: All patchs applied"
 fi
@@ -123,6 +125,31 @@ BuildYaffs() {
 }
 
 #*****************************************************************************
+# Build rootfs
+#*****************************************************************************
+BuildRootfs() {
+   cd .depend/qarm_base/
+   rm -rf busybox-1.7.0_patched
+   sudo tar xjf busybox-1.7.0_patched.tar.bz2
+   cd busybox-1.7.0_patched
+   make
+   make CONFIG_PREFIX=$workDir/.build/code/rootfs install
+   cp /work/tools/gcc-3.4.5-glibc-2.3.6/arm-linux/lib/*.so* $workDir/.build/code/rootfs/lib -d
+   cd $workDir/.depend/qarm_base/yaffs_patched/yaffs2/utils
+   make
+   cd $workDir/.depend/qarm_base/yaffs_patched/yaffs2/utils
+   make
+   sudo chmod +x -R $workDir/.build/code/rootfs
+   cd $workDir/.build/code/rootfs/dev/
+   sudo chmod +x -R mknod.sh
+   ./mknod.sh
+   cd $workDir/.build/code/
+   $workDir/.depend/qarm_base/yaffs_patched/yaffs2/utils/mkyaffs2image rootfs rootfs_yaffs2.yaffs2
+   cd $workDir
+   cp .build/code/rootfs_yaffs2.yaffs2 project/$projectName/bin
+}
+
+#*****************************************************************************
 # Build sw
 #*****************************************************************************
 BuildSw() {
@@ -149,6 +176,11 @@ fi
 if [[ $buildYaffs -eq 1 ]]; then
    MkdirBuild
    BuildYaffs
+fi
+
+if [[ $buildRootfs -eq 1 ]]; then
+   MkdirBuild
+   BuildRootfs
 fi
 
 if [[ $buildSw -eq 1 ]]; then
