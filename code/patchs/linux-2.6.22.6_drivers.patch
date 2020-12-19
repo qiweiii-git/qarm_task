@@ -1,0 +1,13 @@
+diff -uprN linux-2.6.22.6/Makefile linux-2.6.22.6_new/Makefile
+--- linux-2.6.22.6/Makefile	2020-12-16 22:34:45.048454138 +0800
++++ linux-2.6.22.6_new/Makefile	2020-12-16 22:36:55.122915999 +0800
+@@ -309,7 +309,8 @@ AFLAGS_KERNEL	=
+ # Needed to be compatible with the O= option
+ LINUXINCLUDE    := -Iinclude \
+                    $(if $(KBUILD_SRC),-Iinclude2 -I$(srctree)/include) \
+-		   -include include/linux/autoconf.h
++		   -include include/linux/autoconf.h \
++			-I../../../code/applications -I../../../code/utils
+ 
+ CPPFLAGS        := -D__KERNEL__ $(LINUXINCLUDE)
+ 

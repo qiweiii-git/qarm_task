@@ -11,24 +11,26 @@
 #*****************************************************************************
 # Build setting
 #*****************************************************************************
-projectName='qarm05_rootfs'
+projectName='qarm06_ledDrv'
 buildUboot='0'
-buildKernel='0'
+buildKernel='1'
 buildYaffs='0'
 buildRootfs='1'
 buildSw='0'
+buildDriver='1'
 
 if [ ! $1 -eq '' ]; then
    projectName=$1
    buildUboot=$2
    buildKernel=$3
-   buildSw=$3
+   buildSw=$4
 fi
 
 depends=('qarm_base' 'git clone https://gitee.com/qiweiii-gitee/qarm_base.git')
 
 patchs=( 'qarm_base/u-boot-1.1.6' 'u-boot-1.1.6_jz2440.patch' 
          'qarm_base/linux-2.6.22.6' 'linux-2.6.22.6_jz2440_v2v3.patch' 
+         'qarm_base/linux-2.6.22.6' 'linux-2.6.22.6_drivers.patch' 
          'qarm_base/yaffs' 'yaffs_util_mkyaffsimage.patch' )
 
 #*****************************************************************************
@@ -39,44 +41,51 @@ workDir=$(pwd)
 if [ ! -d .depend ]; then
    mkdir .depend
    echo "Info: .depend created"
-fi
 
-dependCnt=${#depends[*]}
+   dependCnt=${#depends[*]}
 
-if (( $dependCnt > 0 )); then
-   cd .depend
-   for((i=0; i<dependCnt; i=i+2))
-   do
-      if [ ! -d ${depends[i]} ]; then
-         echo "Getting ${depends[i]}"
-         ${depends[i+1]}
-      fi
-   done
-   sudo chmod 0755 -R ./
-   cd $workDir
-   echo "Info: All depends got"
-fi
+   if (( $dependCnt > 0 )); then
+      cd .depend
+      for((i=0; i<dependCnt; i=i+2))
+      do
+         if [ ! -d ${depends[i]} ]; then
+            echo "Getting ${depends[i]}"
+            ${depends[i+1]}
+
+            if [[ ${depends[i]} -eq 'qarm_base' ]]; then
+               cd ${depends[i]}
+               sudo tar xjf busybox-1.7.0_patched.tar.bz2
+               sudo tar xjf fs_mini.tar.bz2
+               sudo tar xjf linux-2.6.22.6.tar.bz2
+            fi
+         fi
+      done
+      sudo chmod 0755 -R ./
+      cd $workDir
+      echo "Info: All depends got"
+   fi
 
 #*****************************************************************************
 # Apply patchs
 #*****************************************************************************
-patchsCnt=${#patchs[*]}
+   patchsCnt=${#patchs[*]}
 
-if (( $patchsCnt > 0 )); then
-   cd .depend
-   dependDir=$(pwd)
-   for((i=0; i<patchsCnt; i=i+2))
-   do
-      cd $dependDir
-      cd ${patchs[i]}
-      git add ./ --all
-      git reset --hard HEAD
-      echo "Applying patch ${patchs[i+1]}"
-      patch -f -p1 < $workDir/code/patchs/${patchs[i+1]}
-   done
-   sudo chmod 0755 -R ./
-   cd $workDir
-   echo "Info: All patchs applied"
+   if (( $patchsCnt > 0 )); then
+      cd .depend
+      dependDir=$(pwd)
+      for((i=0; i<patchsCnt; i=i+2))
+      do
+         cd $dependDir
+         cd ${patchs[i]}
+         #git add ./ --all
+         #sudo git reset --hard HEAD
+         echo "Applying patch ${patchs[i+1]}"
+         sudo patch -p1 < $workDir/code/patchs/${patchs[i+1]}
+      done
+      sudo chmod 0755 -R ./
+      cd $workDir
+      echo "Info: All patchs applied"
+   fi
 fi
 
 #*****************************************************************************
@@ -104,10 +113,29 @@ BuildUboot() {
 #*****************************************************************************
 BuildKernel() {
    cd .depend/qarm_base/linux-2.6.22.6
-   cp config_ok .config
+   sudo cp config_ok .config
    make uImage
    cd $workDir
    cp .depend/qarm_base/linux-2.6.22.6/arch/arm/boot/uImage project/$projectName/bin
+}
+
+#*****************************************************************************
+# Build drivers
+#*****************************************************************************
+BuildDriver() {
+   cd .depend/qarm_base/linux-2.6.22.6
+   cp config_ok .config
+   #cp $workDir/code/drivers/led/*.c drivers/char/
+   make modules
+   #cp drivers/char/LedDriver.ko $workDir/project/$projectName/bin
+   cd $workDir/.build/code/drivers/
+   make
+   arm-linux-gcc -o ./led/LedTest ./led/LedTest.c
+   arm-linux-gcc -o ./led/LedRun ./led/LedRun.c
+   cp led/LedDriver.ko $workDir/project/$projectName/bin
+   cp led/LedTest $workDir/project/$projectName/bin
+   cp led/LedRun $workDir/project/$projectName/bin
+   cd $workDir
 }
 
 #*****************************************************************************
@@ -117,8 +145,6 @@ BuildYaffs() {
    cd .depend/qarm_base/yaffs_patched/yaffs2/utils
    make
    cd $workDir/.depend/qarm_base/
-   rm -rf fs_mini
-   sudo tar xjf fs_mini.tar.bz2
    yaffs_patched/yaffs2/utils/mkyaffs2image fs_mini rootfs_yaffs2.yaffs2
    cd $workDir
    cp .depend/qarm_base/rootfs_yaffs2.yaffs2 project/$projectName/bin
@@ -129,12 +155,14 @@ BuildYaffs() {
 #*****************************************************************************
 BuildRootfs() {
    cd .depend/qarm_base/
-   rm -rf busybox-1.7.0_patched
-   sudo tar xjf busybox-1.7.0_patched.tar.bz2
    cd busybox-1.7.0_patched
    make
    make CONFIG_PREFIX=$workDir/.build/code/rootfs install
    cp /work/tools/gcc-3.4.5-glibc-2.3.6/arm-linux/lib/*.so* $workDir/.build/code/rootfs/lib -d
+   cp $workDir/.build/project/$projectName/bin/*.ko* $workDir/.build/code/rootfs/lib/modules -d
+   rm -f $workDir/.build/project/$projectName/bin/*.*
+   rm -f $workDir/.build/project/$projectName/bin/uImage
+   cp $workDir/.build/project/$projectName/bin/* $workDir/.build/code/rootfs/usr/bin -d
    cd $workDir/.depend/qarm_base/yaffs_patched/yaffs2/utils
    make
    cd $workDir/.depend/qarm_base/yaffs_patched/yaffs2/utils
@@ -171,6 +199,11 @@ fi
 if [[ $buildKernel -eq 1 ]]; then
    MkdirBuild
    BuildKernel
+fi
+
+if [[ $buildDriver -eq 1 ]]; then
+   MkdirBuild
+   BuildDriver
 fi
 
 if [[ $buildYaffs -eq 1 ]]; then
